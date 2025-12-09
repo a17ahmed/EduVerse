@@ -8,21 +8,21 @@ import {
   User,
   Mail,
   Phone,
-  MapPin,
-  Calendar,
-  Upload,
   FileText,
   CheckCircle,
   AlertCircle,
   GraduationCap,
   ArrowRight,
   X,
-  Loader2
+  Loader2,
+  FileImage,
+  CreditCard,
+  Award,
+  Plane
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Select,
@@ -34,114 +34,155 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { courses } from "@/lib/data";
+import { submitApplication } from "@/lib/api";
 
 const steps = [
   { id: 1, title: "Personal Info", description: "Basic details" },
-  { id: 2, title: "Education", description: "Academic background" },
-  { id: 3, title: "Course Selection", description: "Choose program" },
-  { id: 4, title: "Documents", description: "Upload files" },
+  { id: 2, title: "Course Selection", description: "Choose program" },
+  { id: 3, title: "Documents", description: "Upload files" },
 ];
 
 export default function ApplyPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [dragActive, setDragActive] = useState(false);
+  const [applicationId, setApplicationId] = useState("");
+  const [submitError, setSubmitError] = useState("");
+
+  // File uploads
+  const [files, setFiles] = useState({
+    result_card_1: null,
+    result_card_2: null,
+    cnic: null,
+    certificate: null,
+    passport: null,
+  });
+
+  const [dragActive, setDragActive] = useState({
+    result_card_1: false,
+    result_card_2: false,
+    cnic: false,
+    certificate: false,
+    passport: false,
+  });
 
   const [formData, setFormData] = useState({
-    // Personal Info
-    firstName: "",
-    lastName: "",
+    name: "",
     email: "",
     phone: "",
-    dateOfBirth: "",
-    address: "",
-    city: "",
-    country: "",
-    // Education
-    highestQualification: "",
-    institution: "",
-    graduationYear: "",
-    gpa: "",
-    // Course Selection
     selectedCourse: "",
-    startDate: "",
-    studyMode: "",
-    // Additional
-    motivation: "",
   });
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setSubmitError("");
   };
 
   const handleSelectChange = (name, value) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setSubmitError("");
   };
 
-  const handleDrag = (e) => {
+  const handleDrag = (e, fieldName) => {
     e.preventDefault();
     e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
+      setDragActive((prev) => ({ ...prev, [fieldName]: true }));
     } else if (e.type === "dragleave") {
-      setDragActive(false);
+      setDragActive((prev) => ({ ...prev, [fieldName]: false }));
     }
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e, fieldName) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragActive(false);
+    setDragActive((prev) => ({ ...prev, [fieldName]: false }));
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFile(e.dataTransfer.files[0]);
+      handleFile(e.dataTransfer.files[0], fieldName);
     }
   };
 
-  const handleFileInput = (e) => {
+  const handleFileInput = (e, fieldName) => {
     if (e.target.files && e.target.files[0]) {
-      handleFile(e.target.files[0]);
+      handleFile(e.target.files[0], fieldName);
     }
   };
 
-  const handleFile = (file) => {
-    if (file.type === "application/pdf") {
-      setUploadedFile(file);
+  const handleFile = (file, fieldName) => {
+    // Accept images and PDFs
+    const allowedTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf"];
+    if (allowedTypes.includes(file.type)) {
+      setFiles((prev) => ({ ...prev, [fieldName]: file }));
     } else {
-      alert("Please upload a PDF file only");
+      alert("Please upload an image (JPG, PNG) or PDF file only");
     }
   };
 
-  const removeFile = () => {
-    setUploadedFile(null);
+  const removeFile = (fieldName) => {
+    setFiles((prev) => ({ ...prev, [fieldName]: null }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Only submit on step 3
+    if (currentStep !== 3) {
+      return;
+    }
+
     setIsSubmitting(true);
+    setSubmitError("");
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      // Build FormData for API
+      const apiFormData = new FormData();
+      apiFormData.append("name", formData.name);
+      apiFormData.append("email", formData.email);
+      if (formData.phone) {
+        apiFormData.append("phone", formData.phone);
+      }
 
-    // Here you would normally send the data to your backend
-    // const formDataToSend = new FormData();
-    // Object.keys(formData).forEach(key => formDataToSend.append(key, formData[key]));
-    // if (uploadedFile) formDataToSend.append('document', uploadedFile);
-    // await fetch('/api/apply', { method: 'POST', body: formDataToSend });
+      // Append files if they exist
+      Object.keys(files).forEach((key) => {
+        if (files[key]) {
+          apiFormData.append(key, files[key]);
+        }
+      });
 
-    setIsSubmitting(false);
-    setIsSubmitted(true);
+      const result = await submitApplication(apiFormData);
+
+      if (result.success) {
+        setApplicationId(result.data.application_id);
+        setIsSubmitted(true);
+      }
+    } catch (error) {
+      setSubmitError(error.message || "Failed to submit application. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const nextStep = () => {
-    if (currentStep < 4) setCurrentStep(currentStep + 1);
+  const nextStep = (e) => {
+    e?.preventDefault();
+    if (currentStep < 3) setCurrentStep(currentStep + 1);
   };
 
-  const prevStep = () => {
+  const prevStep = (e) => {
+    e?.preventDefault();
     if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
+
+  const canProceedStep1 = formData.name && formData.email;
+  const canProceedStep2 = formData.selectedCourse;
+
+  const fileUploadConfigs = [
+    { key: "result_card_1", label: "Result Card (10th/Matric)", icon: FileText },
+    { key: "result_card_2", label: "Result Card (12th/Intermediate)", icon: FileText },
+    { key: "cnic", label: "CNIC / National ID", icon: CreditCard },
+    { key: "certificate", label: "Certificate (if any)", icon: Award },
+    { key: "passport", label: "Passport (if available)", icon: Plane },
+  ];
 
   if (isSubmitted) {
     return (
@@ -152,23 +193,68 @@ export default function ApplyPage() {
             animate={{ opacity: 1, scale: 1 }}
             className="max-w-lg mx-auto text-center"
           >
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="h-10 w-10 text-green-600" />
-            </div>
-            <h1 className="text-3xl font-bold mb-4">Application Submitted!</h1>
-            <p className="text-muted-foreground mb-8">
-              Thank you for applying to EduVerse. We have received your application
-              and will review it shortly. You will receive a confirmation email at{" "}
-              <span className="font-medium text-foreground">{formData.email}</span>.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            {/* Success Animation */}
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.2 }}
+              className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.5 }}
+              >
+                <CheckCircle className="h-12 w-12 text-green-600" />
+              </motion.div>
+            </motion.div>
+
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-3xl font-bold mb-4"
+            >
+              Application Submitted!
+            </motion.h1>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <p className="text-muted-foreground mb-4">
+                Thank you for applying to EduVerse. We have received your application
+                and will review it shortly.
+              </p>
+
+              {applicationId && (
+                <div className="bg-muted/50 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-muted-foreground mb-1">Application ID</p>
+                  <p className="font-mono font-bold text-lg">{applicationId}</p>
+                </div>
+              )}
+
+              <p className="text-muted-foreground mb-8">
+                A confirmation email has been sent to{" "}
+                <span className="font-medium text-foreground">{formData.email}</span>.
+                Our admin team will review your application and get back to you soon.
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="flex flex-col sm:flex-row gap-4 justify-center"
+            >
               <Button asChild className="gradient-primary text-white">
                 <Link href="/courses">Explore More Courses</Link>
               </Button>
               <Button asChild variant="outline">
                 <Link href="/">Back to Home</Link>
               </Button>
-            </div>
+            </motion.div>
           </motion.div>
         </div>
       </div>
@@ -277,9 +363,8 @@ export default function ApplyPage() {
               <CardTitle>{steps[currentStep - 1].title}</CardTitle>
               <CardDescription>
                 {currentStep === 1 && "Please provide your personal information"}
-                {currentStep === 2 && "Tell us about your educational background"}
-                {currentStep === 3 && "Select your preferred program"}
-                {currentStep === 4 && "Upload required documents"}
+                {currentStep === 2 && "Select your preferred program"}
+                {currentStep === 3 && "Upload required documents (all optional)"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -291,83 +376,15 @@ export default function ApplyPage() {
                     animate={{ opacity: 1, x: 0 }}
                     className="space-y-6"
                   >
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="firstName">First Name *</Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="firstName"
-                            name="firstName"
-                            placeholder="John"
-                            value={formData.firstName}
-                            onChange={handleInputChange}
-                            className="pl-10"
-                            required
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="lastName">Last Name *</Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="lastName"
-                            name="lastName"
-                            placeholder="Doe"
-                            value={formData.lastName}
-                            onChange={handleInputChange}
-                            className="pl-10"
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="email">Email Address *</Label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="email"
-                            name="email"
-                            type="email"
-                            placeholder="john@example.com"
-                            value={formData.email}
-                            onChange={handleInputChange}
-                            className="pl-10"
-                            required
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number *</Label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="phone"
-                            name="phone"
-                            type="tel"
-                            placeholder="+1 (555) 000-0000"
-                            value={formData.phone}
-                            onChange={handleInputChange}
-                            className="pl-10"
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-
                     <div className="space-y-2">
-                      <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+                      <Label htmlFor="name">Full Name *</Label>
                       <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                          id="dateOfBirth"
-                          name="dateOfBirth"
-                          type="date"
-                          value={formData.dateOfBirth}
+                          id="name"
+                          name="name"
+                          placeholder="John Doe"
+                          value={formData.name}
                           onChange={handleInputChange}
                           className="pl-10"
                           required
@@ -376,129 +393,42 @@ export default function ApplyPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="address">Address *</Label>
+                      <Label htmlFor="email">Email Address *</Label>
                       <div className="relative">
-                        <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Textarea
-                          id="address"
-                          name="address"
-                          placeholder="Enter your full address"
-                          value={formData.address}
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="email"
+                          name="email"
+                          type="email"
+                          placeholder="john@example.com"
+                          value={formData.email}
                           onChange={handleInputChange}
-                          className="pl-10 min-h-[80px]"
+                          className="pl-10"
                           required
                         />
                       </div>
                     </div>
 
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="city">City *</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Phone Number (Optional)</Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                          id="city"
-                          name="city"
-                          placeholder="New York"
-                          value={formData.city}
+                          id="phone"
+                          name="phone"
+                          type="tel"
+                          placeholder="+92 300 1234567"
+                          value={formData.phone}
                           onChange={handleInputChange}
-                          required
+                          className="pl-10"
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="country">Country *</Label>
-                        <Select
-                          value={formData.country}
-                          onValueChange={(value) => handleSelectChange("country", value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select country" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="us">United States</SelectItem>
-                            <SelectItem value="uk">United Kingdom</SelectItem>
-                            <SelectItem value="ca">Canada</SelectItem>
-                            <SelectItem value="au">Australia</SelectItem>
-                            <SelectItem value="in">India</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
                       </div>
                     </div>
                   </motion.div>
                 )}
 
-                {/* Step 2: Education */}
+                {/* Step 2: Course Selection */}
                 {currentStep === 2 && (
-                  <motion.div
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="space-y-6"
-                  >
-                    <div className="space-y-2">
-                      <Label htmlFor="highestQualification">Highest Qualification *</Label>
-                      <Select
-                        value={formData.highestQualification}
-                        onValueChange={(value) => handleSelectChange("highestQualification", value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select your highest qualification" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="high-school">High School Diploma</SelectItem>
-                          <SelectItem value="associate">Associate Degree</SelectItem>
-                          <SelectItem value="bachelor">Bachelor&apos;s Degree</SelectItem>
-                          <SelectItem value="master">Master&apos;s Degree</SelectItem>
-                          <SelectItem value="phd">Ph.D.</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="institution">Institution Name *</Label>
-                      <Input
-                        id="institution"
-                        name="institution"
-                        placeholder="University of Example"
-                        value={formData.institution}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="graduationYear">Graduation Year *</Label>
-                        <Select
-                          value={formData.graduationYear}
-                          onValueChange={(value) => handleSelectChange("graduationYear", value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select year" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Array.from({ length: 20 }, (_, i) => 2025 - i).map((year) => (
-                              <SelectItem key={year} value={year.toString()}>
-                                {year}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="gpa">GPA / Percentage</Label>
-                        <Input
-                          id="gpa"
-                          name="gpa"
-                          placeholder="3.5 or 85%"
-                          value={formData.gpa}
-                          onChange={handleInputChange}
-                        />
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Step 3: Course Selection */}
-                {currentStep === 3 && (
                   <motion.div
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -545,126 +475,82 @@ export default function ApplyPage() {
                         })()}
                       </div>
                     )}
-
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="startDate">Preferred Start Date *</Label>
-                        <Select
-                          value={formData.startDate}
-                          onValueChange={(value) => handleSelectChange("startDate", value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select start date" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="jan-2025">January 2025</SelectItem>
-                            <SelectItem value="apr-2025">April 2025</SelectItem>
-                            <SelectItem value="jul-2025">July 2025</SelectItem>
-                            <SelectItem value="oct-2025">October 2025</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="studyMode">Study Mode *</Label>
-                        <Select
-                          value={formData.studyMode}
-                          onValueChange={(value) => handleSelectChange("studyMode", value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select study mode" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="full-time">Full Time</SelectItem>
-                            <SelectItem value="part-time">Part Time</SelectItem>
-                            <SelectItem value="online">Online</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="motivation">Why do you want to join this program?</Label>
-                      <Textarea
-                        id="motivation"
-                        name="motivation"
-                        placeholder="Tell us about your motivation and career goals..."
-                        value={formData.motivation}
-                        onChange={handleInputChange}
-                        className="min-h-[120px]"
-                      />
-                    </div>
                   </motion.div>
                 )}
 
-                {/* Step 4: Documents */}
-                {currentStep === 4 && (
+                {/* Step 3: Documents */}
+                {currentStep === 3 && (
                   <motion.div
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     className="space-y-6"
                   >
                     <div className="space-y-2">
-                      <Label>Upload Documents (PDF only) *</Label>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Please upload your resume/CV, academic transcripts, or any other
-                        relevant documents in a single PDF file.
+                      <p className="text-sm text-muted-foreground">
+                        Upload your documents below. All files are optional but help us process your application faster.
+                        Accepted formats: JPG, PNG, PDF (max 10MB each)
                       </p>
+                    </div>
 
-                      <div
-                        className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                          dragActive
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/50"
-                        }`}
-                        onDragEnter={handleDrag}
-                        onDragLeave={handleDrag}
-                        onDragOver={handleDrag}
-                        onDrop={handleDrop}
-                      >
-                        {uploadedFile ? (
-                          <div className="flex items-center justify-center gap-4">
-                            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                              <FileText className="h-6 w-6 text-primary" />
-                            </div>
-                            <div className="text-left">
-                              <p className="font-medium">{uploadedFile.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                              </p>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={removeFile}
-                              className="ml-auto"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                    <div className="grid gap-4">
+                      {fileUploadConfigs.map(({ key, label, icon: Icon }) => (
+                        <div key={key} className="space-y-2">
+                          <Label>{label}</Label>
+                          <div
+                            className={`relative border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                              dragActive[key]
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:border-primary/50"
+                            }`}
+                            onDragEnter={(e) => handleDrag(e, key)}
+                            onDragLeave={(e) => handleDrag(e, key)}
+                            onDragOver={(e) => handleDrag(e, key)}
+                            onDrop={(e) => handleDrop(e, key)}
+                          >
+                            {files[key] ? (
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                                    <FileImage className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div className="text-left">
+                                    <p className="font-medium text-sm truncate max-w-[200px]">
+                                      {files[key].name}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {(files[key].size / 1024 / 1024).toFixed(2)} MB
+                                    </p>
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeFile(key)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-4">
+                                <Icon className="h-6 w-6 text-muted-foreground" />
+                                <div className="text-sm text-muted-foreground">
+                                  Drag & drop or{" "}
+                                  <label className="text-primary cursor-pointer hover:underline">
+                                    browse
+                                    <input
+                                      type="file"
+                                      accept=".jpg,.jpeg,.png,.pdf"
+                                      onChange={(e) => handleFileInput(e, key)}
+                                      className="hidden"
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <>
-                            <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                            <p className="text-muted-foreground mb-2">
-                              Drag and drop your PDF here, or
-                            </p>
-                            <Button type="button" variant="outline" asChild>
-                              <label className="cursor-pointer">
-                                Browse Files
-                                <input
-                                  type="file"
-                                  accept=".pdf"
-                                  onChange={handleFileInput}
-                                  className="hidden"
-                                />
-                              </label>
-                            </Button>
-                            <p className="text-xs text-muted-foreground mt-4">
-                              Maximum file size: 10MB
-                            </p>
-                          </>
-                        )}
-                      </div>
+                        </div>
+                      ))}
                     </div>
 
                     <Separator />
@@ -675,11 +561,15 @@ export default function ApplyPage() {
                       <div className="grid sm:grid-cols-2 gap-4 text-sm">
                         <div>
                           <span className="text-muted-foreground">Name:</span>
-                          <p className="font-medium">{formData.firstName} {formData.lastName}</p>
+                          <p className="font-medium">{formData.name}</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Email:</span>
                           <p className="font-medium">{formData.email}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Phone:</span>
+                          <p className="font-medium">{formData.phone || "Not provided"}</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Course:</span>
@@ -687,19 +577,30 @@ export default function ApplyPage() {
                             {courses.find(c => c.id === formData.selectedCourse)?.title || "-"}
                           </p>
                         </div>
-                        <div>
-                          <span className="text-muted-foreground">Start Date:</span>
-                          <p className="font-medium">{formData.startDate || "-"}</p>
+                        <div className="sm:col-span-2">
+                          <span className="text-muted-foreground">Documents Uploaded:</span>
+                          <p className="font-medium">
+                            {Object.values(files).filter(Boolean).length} file(s)
+                          </p>
                         </div>
                       </div>
                     </div>
+
+                    {submitError && (
+                      <div className="flex items-start gap-2 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
+                        <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                        <p className="text-sm text-red-800 dark:text-red-200">
+                          {submitError}
+                        </p>
+                      </div>
+                    )}
 
                     <div className="flex items-start gap-2 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900">
                       <AlertCircle className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
                       <p className="text-sm text-yellow-800 dark:text-yellow-200">
                         By submitting this application, you confirm that all information
-                        provided is accurate and complete. False information may result
-                        in rejection of your application.
+                        provided is accurate and complete. Our admin team will review your
+                        application and contact you via email.
                       </p>
                     </div>
                   </motion.div>
@@ -710,21 +611,29 @@ export default function ApplyPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={prevStep}
+                    onClick={(e) => prevStep(e)}
                     disabled={currentStep === 1}
                   >
                     Previous
                   </Button>
 
-                  {currentStep < 4 ? (
-                    <Button type="button" onClick={nextStep} className="gradient-primary text-white">
+                  {currentStep < 3 ? (
+                    <Button
+                      type="button"
+                      onClick={(e) => nextStep(e)}
+                      className="gradient-primary text-white"
+                      disabled={
+                        (currentStep === 1 && !canProceedStep1) ||
+                        (currentStep === 2 && !canProceedStep2)
+                      }
+                    >
                       Next Step
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   ) : (
                     <Button
                       type="submit"
-                      disabled={isSubmitting || !uploadedFile}
+                      disabled={isSubmitting}
                       className="gradient-primary text-white"
                     >
                       {isSubmitting ? (

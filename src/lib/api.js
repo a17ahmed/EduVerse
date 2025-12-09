@@ -3,7 +3,7 @@
  * Base URL: http://localhost:3200/application
  */
 
-const API_BASE_URL = "http://localhost:3200/application";
+const API_BASE_URL = "https://www.selloutweb.co.uk/application";
 
 /**
  * Submit Application (First step in the flow)
